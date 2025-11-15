@@ -1,0 +1,82 @@
+# Nome da sua pipeline de segurança
+name: Pipeline de Segurança DevSecOps
+
+# Quando esta pipeline deve rodar?
+# 1. Em todo 'push' (envio de código) para o branch 'main'
+# 2. Em toda 'pull request' (pedido de merge) para o branch 'main'
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# Os "trabalhos" (jobs) que a pipeline vai executar
+jobs:
+  # --- TRABALHO 1: ANÁLISE ESTÁTICA DE CÓDIGO (SAST) ---
+  sast-codeql:
+    name: 1. 🔍 Análise de Código (SAST)
+    runs-on: ubuntu-latest # Rodar em uma máquina virtual Linux
+
+    # Permissões necessárias para o CodeQL
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      # Passo 1: Baixar o seu código para a máquina virtual
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      # Passo 2: Inicializar o CodeQL (o "cérebro" da análise)
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          # IMPORTANTE: Mude 'javascript' para a linguagem do seu projeto
+          # Opções: 'csharp', 'go', 'java', 'javascript', 'python', 'ruby', 'swift'
+          languages: 'javascript' 
+          
+      # Passo 3: Rodar a análise do CodeQL
+      - name: Rodar Análise CodeQL
+        uses: github/codeql-action/analyze@v3
+
+  # --- TRABALHO 2: VERIFICAÇÃO DE DEPENDÊNCIAS ---
+  dependency-review:
+    name: 2. Verificação de Dependências
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write # Permissão para comentar na Pull Request
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      # Passo 1: Rodar a Ação de Revisão de Dependência
+      # Ela compara as dependências antes e depois da mudança
+      - name: Revisão de Dependência
+        uses: actions/dependency-review-action@v4
+        with:
+          # Falhar se encontrar uma vulnerabilidade de qualquer severidade
+          fail-on-severity: 'high' # Mude para 'critical' se quiser ser menos rígido
+          
+  # --- TRABALHO 3: VERIFICAÇÃO DE SEGREDOS ---
+  secret-scan:
+    name: 3.  Verificação de Segredos
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Puxa todo o histórico para escanear
+          
+      # Passo 1: Rodar o "Gitleaks", uma ferramenta popular para achar segredos
+      - name: Rodar Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          # Isso diz ao Gitleaks para reportar os erros para o GitHub
+          GITLEAKS_REPORTER: "github-pr-comment"
+          # Isso é necessário para que a ação possa postar comentários
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
